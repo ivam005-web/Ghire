@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title></title>
+<style>
+  body {
+    font-family: Calibri, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #121820;
+    color: #e0e6ed;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+  }
+  .container {
+    width: 100%;
+    max-width: 980px;
+    background-color: #1a222d;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+  }
+  textarea {
+    width: 100%;
+    height: 180px;
+    background-color: #0d1217;
+    border: 1px solid #2e3c4e;
+    border-radius: 6px;
+    color: #d1d8e0;
+    font-family: monospace;
+    font-size: 13px;
+    padding: 10px;
+    box-sizing: border-box;
+    resize: vertical;
+  }
+  .btn-row {
+    margin: 15px 0 10px 0;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  button.word-btn {
+    background-color: #1f7a4d;
+    color: #fff;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button.word-btn:hover {
+    background-color: #28a745;
+  }
+  #statusBox {
+    display: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    font-size: 13px;
+    margin-bottom: 15px;
+  }
+  .status-ok {
+    background-color: #1c442b;
+    color: #4ade80;
+    border: 1px solid #28a745;
+  }
+  .status-err {
+    background-color: #441c1c;
+    color: #f87171;
+    border: 1px solid #dc3545;
+  }
+  .preview-box {
+    background-color: #ffffff;
+    color: #000000;
+    padding: 20px;
+    border-radius: 6px;
+    margin-top: 10px;
+    border: 1px solid #4a5568;
+    overflow-x: auto;
+  }
+  pre {
+    background-color: #0d1217;
+    border: 1px solid #2e3c4e;
+    border-radius: 6px;
+    padding: 15px;
+    color: #c9d1d9;
+    font-family: monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin-top: 15px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <textarea id="inputText" placeholder="pega aquí los turnos de girhe..."></textarea>
+
+  <div class="btn-row">
+    <button id="btnCopiarWord" class="word-btn" type="button">copiar directo para word</button>
+  </div>
+
+  <div id="statusBox"></div>
+
+  <div id="visualWordTable" class="preview-box"><span style="color: #718096;">pega los turnos arriba para visualizarlos...</span></div>
+
+  <p style="font-size: 12px; color: #8b9bb4; margin-bottom: 5px; margin-top: 20px;">vista previa en código markdown:</p>
+  <pre id="outputText"></pre>
+</div>
+
+<script>
+var estacionesDict = {
+  "sant vicenç de calders": "(SC)",
+  "sant vicenç": "(SC)",
+  "vilanova i la geltrú": "(VU)",
+  "vilanova": "(VU)",
+  "garraf": "(GA)",
+  "castelldefels": "(CF)",
+  "el prat de llobregat": "(EP)",
+  "el prat": "(EP)",
+  "barcelona-sants": "(BR)",
+  "sants": "(BR)",
+  "els monjos": "(EN)",
+  "vilafranca del penedès": "(VF)",
+  "vilafranca": "(VF)",
+  "martorell": "(MR)",
+  "cornellà": "(CO)",
+  "cornella": "(CO)",
+  "l hospitalet de llobregat": "(LH)",
+  "hospitalet": "(LH)",
+  "aeroport": "(AE)",
+  "rubí": "(RU)",
+  "rubi": "(RU)",
+  "la garriga": "(LR)",
+  "vic": "(VI)",
+  "ripoll": "(RP)",
+  "ribes de freser": "(RF)",
+  "ribes": "(RF)",
+  "manresa": "(MA)",
+  "terrassa": "(TR)",
+  "montcada bifurcació": "(MQ)",
+  "barcelona-s. andreu comtal": "(BQ)",
+  "s. andreu comtal": "(BQ)",
+  "granollers centre": "(GC)",
+  "sant celoni": "(SL)",
+  "maçanet-massanes": "(MM)",
+  "maçanet": "(MM)",
+  "barcelona-est. de frança": "(BT)",
+  "est. de frança": "(BT)",
+  "estacio de frança": "(BT)",
+  "frança": "(BT)",
+  "mataró": "(MT)",
+  "mataro": "(MT)",
+  "arenys de mar": "(AM)",
+  "calella": "(CY)",
+  "blanes": "(BL)"
+};
+
+var trenes32 = [
+  "25515", "25517", "25519", "25521", "25523", "25525", "25527", "25529",
+  "25538", "25540", "25542", "25544", "25546", "25548", "25550", "25552",
+  "25554", "25556", "25558", "25560"
+];
+
+var trenes25ExtraVerde = ["25480", "25482", "25486", "25500", "25510"];
+
+function mostrarAviso(texto, tipo) {
+  var b = document.getElementById("statusBox");
+  if (!b) return;
+  b.style.display = "block";
+  b.className = (tipo === "ok") ? "status-ok" : "status-err";
+  b.innerHTML = texto;
+}
+
+function toMinutes(t) {
+  if (!t || typeof t !== "string" || t.indexOf(":") === -1) return 0;
+  var parts = t.trim().split(":");
+  var h = parseInt(parts[0], 10);
+  var m = parseInt(parts[1], 10);
+  return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+}
+
+function fromMinutes(m) {
+  var norm = (((m || 0) % 1440) + 1440) % 1440;
+  var hh = String(Math.floor(norm / 60)).padStart(2, '0');
+  var mm = String(norm % 60).padStart(2, '0');
+  return hh + ":" + mm;
+}
+
+function formatDuration(m) {
+  var val = isNaN(m) ? 0 : m;
+  var hh = String(Math.floor(val / 60)).padStart(2, '0');
+  var mm = String(val % 60).padStart(2, '0');
+  return hh + "h " + mm + " min";
+}
+
+function diffMinutes(start, end) {
+  var s = toMinutes(start);
+  var e = toMinutes(end);
+  if (e < s) e += 1440;
+  return e - s;
+}
+
+function getSigla(texto) {
+  if (!texto) return "";
+  var clean = texto.toLowerCase();
+  for (var key in estacionesDict) {
+    if (clean.indexOf(key) !== -1) return estacionesDict[key];
+  }
+  var dm = clean.match(/\b(sc|vu|ga|cf|ep|br|en|vf|mr|co|lh|ae|ru|lr|vi|rp|rf|ma|tr|mq|bq|gc|sl|mm|bt|mt|am|cy|bl)\b/i);
+  if (dm) return "(" + dm[1].toUpperCase() + ")";
+  return "";
+}
+
+function obtenerColorLinea(tren, inicioSigla, finSigla, isSinServicio, isSC) {
+  if (isSC) {
+    return "#718096";
+  }
+  if (isSinServicio || (tren && tren.toLowerCase().indexOf("v ") === 0) || (tren && tren.toLowerCase() === "taxi")) {
+    return "#c53030";
+  }
+
+  var cleanTren = (tren || "").replace(/^v\s*/i, "").trim();
+  if (/^77\d*/.test(cleanTren)) {
+    return "#c05621";
+  }
+
+  var ini = (inicioSigla || "").toUpperCase();
+  var fin = (finSigla || "").toUpperCase();
+
+  var esScBt = (ini.indexOf("SC") !== -1 && fin.indexOf("BT") !== -1) || (ini.indexOf("BT") !== -1 && fin.indexOf("SC") !== -1);
+  if (esScBt) {
+    return "#1e7e34";
+  }
+
+  var esVuBt = (ini.indexOf("VU") !== -1 && fin.indexOf("BT") !== -1) || (ini.indexOf("BT") !== -1 && fin.indexOf("VU") !== -1);
+  if (/^28\d*/.test(cleanTren) && esVuBt) {
+    return "#1e7e34";
+  }
+
+  var numBase = cleanTren.replace(/-\d+.*$/, "").trim();
+  if (/^25\d*/.test(cleanTren) && ini.indexOf("VU") !== -1 && (trenes25ExtraVerde.indexOf(numBase) !== -1 || fin.indexOf("BT") !== -1)) {
+    return "#1e7e34";
+  }
+
+  return "#000000";
+}
+
+function procesarUnTurno(bloqueTexto) {
+  var rawLines = bloqueTexto.split("\n");
+  var lines = [];
+  for (var r = 0; r < rawLines.length; r++) {
+    var tr = rawLines[r].trim();
+    if (tr.length > 0) lines.push(tr);
+  }
+  if (lines.length === 0) return null;
+
+  var turnoNum = "";
+  var fecha = "";
+  var diaSemana = "";
+
+  var headerMatch = bloqueTexto.match(/turno\s*(\w+)?\s*(?:para el\s*)?(?:día|dia)?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+  if (headerMatch) {
+    turnoNum = headerMatch[1] ? headerMatch[1] : "";
+    fecha = headerMatch[2];
+    var parts = fecha.split("/");
+    var d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+    var dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+    diaSemana = dias[d.getDay()];
+  } else {
+    var dMatch = bloqueTexto.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+    if (dMatch) {
+      fecha = dMatch[1];
+      var parts2 = fecha.split("/");
+      var d2 = new Date(parseInt(parts2[2], 10), parseInt(parts2[1], 10) - 1, parseInt(parts2[0], 10));
+      var dias2 = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+      diaSemana = dias2[d2.getDay()];
+    }
+  }
+
+  var esFinSemanaOFestivo = function() {
+    if (!fecha) return false;
+    var p = fecha.split("/");
+    var dt = new Date(parseInt(p[2], 10), parseInt(p[1], 10) - 1, parseInt(p[0], 10));
+    var dy = dt.getDay();
+    if (dy === 0 || dy === 6) return true;
+    var dm = p[0].padStart(2, '0') + "/" + p[1].padStart(2, '0');
+    return (dm === "24/06" || dm === "15/08" || dm === "11/09" || dm === "24/09");
+  };
+
+  var services = [];
+
+  for (var k = 0; k < lines.length; k++) {
+    var rawLine = lines[k];
+    var line = rawLine.toLowerCase();
+
+    if (line.indexOf("servicio") !== -1 && (line.indexOf("origen") !== -1 || line.indexOf("toma") !== -1)) continue;
+    if (line.indexOf("turno") === 0 && line.indexOf("para el") !== -1) continue;
+
+    var matches = rawLine.match(/\b([012]?\d:[0-5]\d)\b/g);
+    if (!matches || matches.length < 2) continue;
+
+    var isSC = (line.indexOf("act. complem") !== -1 || line.indexOf("servicios complementarios") !== -1 || line.endsWith(" ac") || line.indexOf(" ac ") !== -1);
+    var isSinServicio = (line.indexOf("viajes sin servicio") !== -1 || line.indexOf("viajero") !== -1 || line.indexOf("taxi") !== -1);
+    var isConduccion = (line.indexOf("conducción") !== -1 || line.indexOf("conduccion") !== -1);
+
+    var tren = "";
+    var toma = "—";
+    var inicioHora = "";
+    var inicioSigla = "";
+    var finHora = "";
+    var finSigla = "";
+    var deje = "—";
+
+    if (isSC && matches.length === 2) {
+      tren = "sc";
+      inicioHora = matches[0];
+      finHora = matches[1];
+      var preTime = rawLine.split(inicioHora)[0];
+      inicioSigla = getSigla(preTime) || "(VU)";
+      finSigla = inicioSigla;
+    } else {
+      var matchNum = rawLine.match(/\b([vV]?\d{4,5}|taxi|TAXI)\b/);
+      tren = matchNum ? matchNum[1].toLowerCase() : "";
+
+      if (matches.length === 4) {
+        toma = matches[0];
+        inicioHora = matches[1];
+        finHora = matches[2];
+        deje = matches[3];
+      } else if (matches.length === 3) {
+        var idx1 = rawLine.indexOf(matches[1]);
+        var idx2 = rawLine.indexOf(matches[2]);
+        var between1and2 = rawLine.substring(idx1 + 5, idx2);
+        if (/[a-záéíóúñ]/i.test(between1and2)) {
+          toma = matches[0];
+          inicioHora = matches[1];
+          finHora = matches[2];
+        } else {
+          inicioHora = matches[0];
+          finHora = matches[1];
+          deje = matches[2];
+        }
+      } else if (matches.length === 2) {
+        inicioHora = matches[0];
+        finHora = matches[1];
+      }
+
+      var preInicio = rawLine.substring(0, rawLine.indexOf(inicioHora));
+      inicioSigla = getSigla(preInicio) || "(VU)";
+
+      var preFin = rawLine.substring(rawLine.indexOf(inicioHora) + 5, rawLine.indexOf(finHora));
+      finSigla = getSigla(preFin) || "(VU)";
+
+      if (isSC) {
+        tren = "sc";
+        toma = "—";
+        deje = "—";
+      } else if (tren === "taxi" || isSinServicio) {
+        if (tren.indexOf("v ") !== 0) {
+          tren = "v " + tren.replace(/^v/, "").trim();
+        }
+      }
+    }
+
+    if (tren === "28506") tren = "28506-27+VU35";
+
+    var cleanTrenNum = tren.replace(/^v\s*/, "");
+    if (esFinSemanaOFestivo() && trenes32.indexOf(cleanTrenNum) !== -1) {
+      if (!tren.endsWith("-32")) tren += "-32";
+    }
+
+    if (!isSinServicio && !isSC && line.indexOf("act.") === -1) {
+      isConduccion = true;
+    }
+
+    services.push({
+      tren: tren || "—",
+      toma: toma,
+      inicioHora: inicioHora,
+      inicioSigla: inicioSigla,
+      finHora: finHora,
+      finSigla: finSigla,
+      deje: deje,
+      isConduccion: isConduccion && !isSinServicio && !isSC,
+      isSC: isSC,
+      isSinServicio: isSinServicio
+    });
+  }
+
+  if (services.length === 0) return null;
+
+  var primeraToma = (services[0].toma !== "—") ? services[0].toma : services[0].inicioHora;
+  var ultimoDeje = (services[services.length - 1].deje !== "—") ? services[services.length - 1].deje : services[services.length - 1].finHora;
+
+  var coche = fromMinutes(toMinutes(primeraToma) - 20);
+  var casa = fromMinutes(toMinutes(ultimoDeje) + 20);
+  var jornadaTotalMin = diffMinutes(primeraToma, ultimoDeje);
+
+  var conduccionTotalMin = 0;
+  var descansoTotalMin = 0;
+  var descansosFilas = [];
+
+  for (var i = 0; i < services.length; i++) {
+    var s = services[i];
+    var condMin = s.isConduccion ? diffMinutes(s.inicioHora, s.finHora) : 0;
+    conduccionTotalMin += condMin;
+
+    var descStr = "—";
+    var descMin = 0;
+
+    if (s.isSC) {
+      descMin = diffMinutes(s.inicioHora, s.finHora);
+      descansoTotalMin += descMin;
+      descStr = (descMin >= 45) ? "* " + formatDuration(descMin) + " *" : formatDuration(descMin);
+    } else if (i < services.length - 1) {
+      var nextS = services[i + 1];
+      descMin = diffMinutes(s.finHora, nextS.inicioHora);
+      descansoTotalMin += descMin;
+      descStr = (descMin >= 45) ? "* " + formatDuration(descMin) + " *" : formatDuration(descMin);
+    }
+
+    descansosFilas.push({ condMin: condMin, descStr: descStr, descMin: descMin });
+  }
+
+  var hayReset = false;
+  for (var dIdx = 0; dIdx < descansosFilas.length; dIdx++) {
+    if (descansosFilas[dIdx].descMin >= 45) {
+      hayReset = true;
+      break;
+    }
+  }
+  var limite = hayReset ? "" : "7:13";
+
+  var bloquesFatiga = [];
+  var currentBlockStart = null;
+  var currentBlockEnd = null;
+
+  for (var f = 0; f < services.length; f++) {
+    var sFat = services[f];
+    var dFat = descansosFilas[f];
+
+    if (sFat.isConduccion) {
+      if (!currentBlockStart) currentBlockStart = sFat.inicioHora;
+      currentBlockEnd = sFat.finHora;
+    }
+
+    if (dFat.descMin >= 45 || f === services.length - 1) {
+      if (currentBlockStart && currentBlockEnd) {
+        bloquesFatiga.push(diffMinutes(currentBlockStart, currentBlockEnd));
+      }
+      currentBlockStart = null;
+      currentBlockEnd = null;
+    }
+  }
+
+  var maxFatigaMin = 0;
+  var maxBloqueIdx = 1;
+  for (var b = 0; b < bloquesFatiga.length; b++) {
+    if (bloquesFatiga[b] > maxFatigaMin) {
+      maxFatigaMin = bloquesFatiga[b];
+      maxBloqueIdx = b + 1;
+    }
+  }
+
+  var fatigaReport = formatDuration(maxFatigaMin) + " (" + maxBloqueIdx + "º bloque)";
+  var fatigaConAsterisco = false;
+  if (maxFatigaMin > 240) {
+    fatigaReport = "* " + fatigaReport;
+    fatigaConAsterisco = true;
+  }
+
+  var titulo = ("turno " + turnoNum + " para el " + diaSemana + " " + fecha).replace(/\s+/g, ' ').trim();
+
+  // markdown
+  var md = titulo + "\n\n";
+  md += "| límite | jornada total | conducción real | descanso total | fatiga | coche | casa |\n";
+  md += "| :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n";
+  md += "| " + limite + " | " + formatDuration(jornadaTotalMin) + " | " + formatDuration(conduccionTotalMin) + " | " + formatDuration(descansoTotalMin) + " | " + fatigaReport + " | " + coche + " | " + casa + " |\n\n";
+
+  md += "| tren | toma | inicio | fin | deje | conducción | descanso |\n";
+  md += "| :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n";
+
+  for (var m = 0; m < services.length; m++) {
+    var sm = services[m];
+    var dm = descansosFilas[m];
+    var tomaCol = (sm.toma !== "—") ? sm.toma : "—";
+    var dejeCol = (sm.deje !== "—") ? sm.deje : "—";
+    md += "| " + sm.tren + " | " + tomaCol + " | " + sm.inicioHora + " " + sm.inicioSigla + " | " + sm.finHora + " " + sm.finSigla + " | " + dejeCol + " | " + formatDuration(dm.condMin) + " | " + dm.descStr + " |\n";
+  }
+
+  // estilos de tabla con espaciado vertical
+  var t1HeaderStyle = "border: none !important; mso-border-alt: none !important; padding: 4px 0px 8px 0px; font-family: Calibri, sans-serif; font-size: 12pt; font-weight: normal; text-align: center; white-space: nowrap;";
+  var t1DataStyle = "border: none !important; mso-border-alt: none !important; padding: 8px 0px 4px 0px; font-family: Calibri, sans-serif; font-size: 12pt; font-weight: normal; text-align: center; white-space: nowrap;";
+  var t2BaseStyle = "border: none !important; mso-border-alt: none !important; padding: 3px 0px; font-family: Calibri, sans-serif; font-size: 12pt; font-weight: normal; text-align: center; white-space: nowrap;";
+
+  var htmlWord = '<p style="font-family: Calibri, sans-serif; font-size: 12pt; margin: 0 0 10pt 0; font-weight: normal; color: #000000; text-align: left;">' + titulo.toLowerCase() + '</p>';
+
+  var fatigaContenidoWord = fatigaReport;
+  if (fatigaConAsterisco) {
+    fatigaContenidoWord = '<span style="background-color: #ffff00; mso-highlight: yellow; padding: 1px 4px; border-radius: 2px;">' + fatigaReport + '</span>';
+  }
+
+  // tabla 1: resumen
+  htmlWord += '<table border="0" align="center" cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: none !important; mso-border-alt: none !important; font-family: Calibri, sans-serif; font-size: 12pt; width: 19.0cm; max-width: 19.0cm; margin-left: auto; margin-right: auto; margin-bottom: 16pt; table-layout: fixed; color: #000000;">';
+  htmlWord += '<tr>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 1.5cm;">límite</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 2.8cm;">jornada total</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 3.0cm;">conducción real</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 2.9cm;">descanso total</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 5.4cm;">fatiga</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 1.7cm;">coche</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 1.7cm;">casa</td>';
+  htmlWord += '</tr>';
+
+  htmlWord += '<tr>';
+  htmlWord += '<td style="' + t1DataStyle + '">' + limite + '</td>';
+  htmlWord += '<td style="' + t1DataStyle + '">' + formatDuration(jornadaTotalMin) + '</td>';
+  htmlWord += '<td style="' + t1DataStyle + '">' + formatDuration(conduccionTotalMin) + '</td>';
+  htmlWord += '<td style="' + t1DataStyle + '">' + formatDuration(descansoTotalMin) + '</td>';
+  htmlWord += '<td style="' + t1DataStyle + '">' + fatigaContenidoWord + '</td>';
+  htmlWord += '<td style="' + t1DataStyle + '">' + coche + '</td>';
+  htmlWord += '<td style="' + t1DataStyle + '">' + casa + '</td>';
+  htmlWord += '</tr>';
+  htmlWord += '</table><br style="line-height: 8pt;">';
+
+  // tabla 2: servicios
+  htmlWord += '<table border="0" align="center" cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: none !important; mso-border-alt: none !important; font-family: Calibri, sans-serif; font-size: 12pt; width: 19.0cm; max-width: 19.0cm; margin-left: auto; margin-right: auto; table-layout: fixed;">';
+  htmlWord += '<tr style="color: #000000;">';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 2.9cm;">tren</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 1.6cm;">toma</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 2.7cm;">inicio</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 2.7cm;">fin</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 1.6cm;">deje</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 3.0cm;">conducción</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 4.5cm;">descanso</td>';
+  htmlWord += '</tr>';
+
+  for (var n = 0; n < services.length; n++) {
+    var sn = services[n];
+    var dn = descansosFilas[n];
+    var tomaC = (sn.toma !== "—") ? sn.toma : "—";
+    var dejeC = (sn.deje !== "—") ? sn.deje : "—";
+
+    var colorFila = obtenerColorLinea(sn.tren, sn.inicioSigla, sn.finSigla, sn.isSinServicio, sn.isSC);
+    var rowStyle = t2BaseStyle + " color: " + colorFila + ";";
+
+    var esReset = (dn.descMin >= 45);
+
+    var finTxt = sn.finHora + ' ' + sn.finSigla;
+    if (esReset) {
+      finTxt = '<span style="background-color: #ffff00; mso-highlight: yellow; padding: 1px 4px; border-radius: 2px;">' + finTxt + '</span>';
+    }
+
+    var descTxt = dn.descStr;
+    if (esReset) {
+      descTxt = '<span style="background-color: #ffff00; mso-highlight: yellow; padding: 1px 4px; border-radius: 2px;">' + descTxt + '</span>';
+    }
+
+    htmlWord += '<tr style="color: ' + colorFila + ';">';
+    htmlWord += '<td style="' + rowStyle + '">' + sn.tren + '</td>';
+    htmlWord += '<td style="' + rowStyle + '">' + tomaC + '</td>';
+    htmlWord += '<td style="' + rowStyle + '">' + sn.inicioHora + ' ' + sn.inicioSigla + '</td>';
+    htmlWord += '<td style="' + rowStyle + '">' + finTxt + '</td>';
+    htmlWord += '<td style="' + rowStyle + '">' + dejeC + '</td>';
+    htmlWord += '<td style="' + rowStyle + '">' + formatDuration(dn.condMin) + '</td>';
+    htmlWord += '<td style="' + rowStyle + '">' + descTxt + '</td>';
+    htmlWord += '</tr>';
+  }
+  htmlWord += '</table>';
+
+  var fixSiglas = function(txt) {
+    return txt.toLowerCase().replace(/\((sc|vu|ga|cf|ep|br|en|vf|mr|co|lh|ae|ru|lr|vi|rp|rf|ma|tr|mq|bq|gc|sl|mm|bt|mt|am|cy|bl)\)/gi, function(match) {
+      return match.toUpperCase();
+    });
+  };
+
+  return {
+    titulo: titulo,
+    md: fixSiglas(md),
+    html: fixSiglas(htmlWord)
+  };
+}
+
+var rawHtmlParaWord = "";
+
+function ejecutarProcesamiento() {
+  var inputEl = document.getElementById("inputText");
+  if (!inputEl) return 0;
+  var input = inputEl.value;
+
+  if (!input || input.trim().length === 0) {
+    var b = document.getElementById("statusBox");
+    if (b) b.style.display = "none";
+    document.getElementById("outputText").innerText = "";
+    document.getElementById("visualWordTable").innerHTML = '<span style="color: #718096;">pega los turnos arriba para visualizarlos...</span>';
+    rawHtmlParaWord = "";
+    return 0;
+  }
+
+  var rawLines = input.split("\n");
+  var bloques = [];
+  var bloqueActual = [];
+
+  for (var i = 0; i < rawLines.length; i++) {
+    var lineTrim = rawLines[i].trim();
+    if (/^(turno\s+\w+|d[íi]a\s+\d+)/i.test(lineTrim)) {
+      if (bloqueActual.length > 0) {
+        bloques.push(bloqueActual.join("\n"));
+        bloqueActual = [];
+      }
+    }
+    bloqueActual.push(rawLines[i]);
+  }
+  if (bloqueActual.length > 0) {
+    bloques.push(bloqueActual.join("\n"));
+  }
+
+  var totalProcesados = 0;
+  var mdGlobal = "";
+  var contenidoTurnos = "";
+  var htmlVisual = "";
+
+  for (var b = 0; b < bloques.length; b++) {
+    var res = procesarUnTurno(bloques[b]);
+    if (res) {
+      if (totalProcesados > 0) {
+        mdGlobal += "\n\n---\n\n";
+        contenidoTurnos += '<br clear="all" style="page-break-before: always; mso-break-type: page-break;" />';
+        htmlVisual += '<div style="border-top: 2px dashed #718096; margin: 25px 0;"></div>';
+      }
+      totalProcesados++;
+      mdGlobal += res.md;
+      contenidoTurnos += res.html;
+      htmlVisual += res.html;
+    }
+  }
+
+  if (totalProcesados === 0) {
+    mostrarAviso("no se ha detectado ningún turno válido con horas de trenes.", "err");
+    return 0;
+  }
+
+  var docCompleto = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>";
+  docCompleto += "<head><meta charset='utf-8'>";
+  docCompleto += "<style>";
+  docCompleto += "@page { size: 23.5cm 16.0cm; mso-page-orientation: landscape; margin: 2.0cm 2.25cm 2.0cm 2.25cm; }";
+  docCompleto += "body { font-family: Calibri, sans-serif; font-size: 12pt; }";
+  docCompleto += "</style></head><body>";
+  docCompleto += contenidoTurnos;
+  docCompleto += "</body></html>";
+
+  rawHtmlParaWord = docCompleto;
+  document.getElementById("outputText").innerText = mdGlobal.trim();
+  document.getElementById("visualWordTable").innerHTML = htmlVisual;
+
+  mostrarAviso("se han procesado " + totalProcesados + " turno(s) correctamente.", "ok");
+  return totalProcesados;
+}
+
+function copiarDirectoParaWord() {
+  var inputEl = document.getElementById("inputText");
+  if (!inputEl || !inputEl.value.trim()) {
+    mostrarAviso("el cuadro está vacío. pega al menos un turno antes de procesar.", "err");
+    return;
+  }
+
+  var count = ejecutarProcesamiento();
+  if (count === 0) return;
+
+  var copiado = false;
+  function onCopy(e) {
+    e.clipboardData.setData("text/html", rawHtmlParaWord);
+    e.clipboardData.setData("text/plain", document.getElementById("outputText").innerText);
+    e.preventDefault();
+    copiado = true;
+  }
+
+  document.addEventListener("copy", onCopy);
+  try {
+    document.execCommand("copy");
+  } catch(err) {
+    copiado = false;
+  }
+  document.removeEventListener("copy", onCopy);
+
+  if (!copiado && navigator.clipboard && navigator.clipboard.write) {
+    var blobHtml = new Blob([rawHtmlParaWord], { type: "text/html" });
+    var blobText = new Blob([document.getElementById("outputText").innerText], { type: "text/plain" });
+    navigator.clipboard.write([
+      new ClipboardItem({ "text/html": blobHtml, "text/plain": blobText })
+    ]).then(function() {
+      mostrarAviso("¡turnos copiados con éxito! pulsa ctrl + v en word.", "ok");
+    }).catch(function(e) {
+      mostrarAviso("error al copiar: " + e.message, "err");
+    });
+    return;
+  }
+
+  if (copiado) {
+    mostrarAviso("¡copiado directo! pulsa ctrl + v en word.", "ok");
+  } else {
+    mostrarAviso("el navegador no ha permitido la inyección. usa ctrl + c.", "err");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  var btnW = document.getElementById("btnCopiarWord");
+  var txt = document.getElementById("inputText");
+
+  if (btnW) btnW.addEventListener("click", copiarDirectoParaWord);
+  if (txt) txt.addEventListener("input", ejecutarProcesamiento);
+
+  ejecutarProcesamiento();
+});
+</script>
+
+</body>
+</html>

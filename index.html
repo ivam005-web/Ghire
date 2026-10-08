@@ -229,7 +229,7 @@ function obtenerColorLinea(tren, inicioSigla, finSigla, isSinServicio, isSC) {
   var ini = (inicioSigla || "").toUpperCase();
   var fin = (finSigla || "").toUpperCase();
 
-  // trayectos de vu a sl y de sl a cf en verde
+  // trayectos vu a sl y sl a cf en verde
   if (ini.indexOf("VU") !== -1 && fin.indexOf("SL") !== -1) {
     return "#1e7e34";
   }
@@ -238,8 +238,8 @@ function obtenerColorLinea(tren, inicioSigla, finSigla, isSinServicio, isSC) {
   }
 
   // comerciales sc-bt o bt-sc integrales de extremo a extremo
-  var esScBtCompleto = (ini.indexOf("SC") !== -1 && fin.indexOf("BT") !== -1) || (ini.indexOf("BT") !== -1 && fin.indexOf("SC") !== -1);
-  if (esScBtCompleto) {
+  var esScBt = (ini.indexOf("SC") !== -1 && fin.indexOf("BT") !== -1) || (ini.indexOf("BT") !== -1 && fin.indexOf("SC") !== -1);
+  if (esScBt) {
     return "#1e7e34";
   }
 
@@ -271,7 +271,7 @@ function procesarUnTurno(bloqueTexto) {
   var fecha = "";
   var diaSemana = "";
 
-  var headerMatch = bloqueTexto.match(/turno\s*(\w+)?\s*(?:para el\s*)?(?:día|dia)?\s*(\d{1,2}/\d{1,2}/\d{2,4})/i);
+  var headerMatch = bloqueTexto.match(/turno\s*(\w+)?\s*(?:para el\s*)?(?:día|dia)?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   if (headerMatch) {
     turnoNum = headerMatch[1] ? headerMatch[1] : "";
     fecha = headerMatch[2];
@@ -280,7 +280,7 @@ function procesarUnTurno(bloqueTexto) {
     var dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
     diaSemana = dias[d.getDay()];
   } else {
-    var dMatch = bloqueTexto.match(/(\d{1,2}/\d{1,2}/\d{2,4})/);
+    var dMatch = bloqueTexto.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
     if (dMatch) {
       fecha = dMatch[1];
       var parts2 = fecha.split("/");
@@ -418,7 +418,6 @@ function procesarUnTurno(bloqueTexto) {
     var duracionServicio = diffMinutes(s.inicioHora, s.finHora);
     var duracionFila = 0;
 
-    // muestra el tiempo de marcha del tren en viajeros/taxi pero no lo computa en conduccion real total
     if (s.isSC) {
       duracionFila = 0;
     } else if (s.isConduccion) {

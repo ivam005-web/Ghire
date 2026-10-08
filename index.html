@@ -229,18 +229,29 @@ function obtenerColorLinea(tren, inicioSigla, finSigla, isSinServicio, isSC) {
   var ini = (inicioSigla || "").toUpperCase();
   var fin = (finSigla || "").toUpperCase();
 
-  var esScBt = (ini.indexOf("SC") !== -1 && fin.indexOf("BT") !== -1) || (ini.indexOf("BT") !== -1 && fin.indexOf("SC") !== -1);
-  if (esScBt) {
+  // trayectos de vu a sl y de sl a cf en verde
+  if (ini.indexOf("VU") !== -1 && fin.indexOf("SL") !== -1) {
+    return "#1e7e34";
+  }
+  if (ini.indexOf("SL") !== -1 && fin.indexOf("CF") !== -1) {
     return "#1e7e34";
   }
 
+  // comerciales sc-bt o bt-sc integrales de extremo a extremo
+  var esScBtCompleto = (ini.indexOf("SC") !== -1 && fin.indexOf("BT") !== -1) || (ini.indexOf("BT") !== -1 && fin.indexOf("SC") !== -1);
+  if (esScBtCompleto) {
+    return "#1e7e34";
+  }
+
+  // comerciales 28xxx vu-bt o bt-vu
   var esVuBt = (ini.indexOf("VU") !== -1 && fin.indexOf("BT") !== -1) || (ini.indexOf("BT") !== -1 && fin.indexOf("VU") !== -1);
   if (/^28\d*/.test(cleanTren) && esVuBt) {
     return "#1e7e34";
   }
 
+  // comerciales 25xxx con salida de vu hacia bt autorizados expresamente
   var numBase = cleanTren.replace(/-\d+.*$/, "").trim();
-  if (/^25\d*/.test(cleanTren) && ini.indexOf("VU") !== -1 && (trenes25ExtraVerde.indexOf(numBase) !== -1 || fin.indexOf("BT") !== -1)) {
+  if (/^25\d*/.test(cleanTren) && ini.indexOf("VU") !== -1 && fin.indexOf("BT") !== -1 && trenes25ExtraVerde.indexOf(numBase) !== -1) {
     return "#1e7e34";
   }
 
@@ -260,7 +271,7 @@ function procesarUnTurno(bloqueTexto) {
   var fecha = "";
   var diaSemana = "";
 
-  var headerMatch = bloqueTexto.match(/turno\s*(\w+)?\s*(?:para el\s*)?(?:día|dia)?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+  var headerMatch = bloqueTexto.match(/turno\s*(\w+)?\s*(?:para el\s*)?(?:día|dia)?\s*(\d{1,2}/\d{1,2}/\d{2,4})/i);
   if (headerMatch) {
     turnoNum = headerMatch[1] ? headerMatch[1] : "";
     fecha = headerMatch[2];
@@ -269,7 +280,7 @@ function procesarUnTurno(bloqueTexto) {
     var dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
     diaSemana = dias[d.getDay()];
   } else {
-    var dMatch = bloqueTexto.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+    var dMatch = bloqueTexto.match(/(\d{1,2}/\d{1,2}/\d{2,4})/);
     if (dMatch) {
       fecha = dMatch[1];
       var parts2 = fecha.split("/");
@@ -404,8 +415,20 @@ function procesarUnTurno(bloqueTexto) {
 
   for (var i = 0; i < services.length; i++) {
     var s = services[i];
-    var condMin = s.isConduccion ? diffMinutes(s.inicioHora, s.finHora) : 0;
-    conduccionTotalMin += condMin;
+    var duracionServicio = diffMinutes(s.inicioHora, s.finHora);
+    var duracionFila = 0;
+
+    // muestra el tiempo de marcha del tren en viajeros/taxi pero no lo computa en conduccion real total
+    if (s.isSC) {
+      duracionFila = 0;
+    } else if (s.isConduccion) {
+      duracionFila = duracionServicio;
+      conduccionTotalMin += duracionServicio;
+    } else if (s.isSinServicio) {
+      duracionFila = duracionServicio;
+    } else {
+      duracionFila = 0;
+    }
 
     var descStr = "—";
     var descMin = 0;
@@ -421,7 +444,7 @@ function procesarUnTurno(bloqueTexto) {
       descStr = (descMin >= 45) ? "* " + formatDuration(descMin) + " *" : formatDuration(descMin);
     }
 
-    descansosFilas.push({ condMin: condMin, descStr: descStr, descMin: descMin });
+    descansosFilas.push({ condMin: duracionFila, descStr: descStr, descMin: descMin });
   }
 
   var hayReset = false;
@@ -490,7 +513,7 @@ function procesarUnTurno(bloqueTexto) {
     md += "| " + sm.tren + " | " + tomaCol + " | " + sm.inicioHora + " " + sm.inicioSigla + " | " + sm.finHora + " " + sm.finSigla + " | " + dejeCol + " | " + formatDuration(dm.condMin) + " | " + dm.descStr + " |\n";
   }
 
-  // estilos de tabla con espaciado vertical
+  // estilos word con nowrap y padding optimizado
   var t1HeaderStyle = "border: none !important; mso-border-alt: none !important; padding: 4px 0px 8px 0px; font-family: Calibri, sans-serif; font-size: 12pt; font-weight: normal; text-align: center; white-space: nowrap;";
   var t1DataStyle = "border: none !important; mso-border-alt: none !important; padding: 8px 0px 4px 0px; font-family: Calibri, sans-serif; font-size: 12pt; font-weight: normal; text-align: center; white-space: nowrap;";
   var t2BaseStyle = "border: none !important; mso-border-alt: none !important; padding: 3px 0px; font-family: Calibri, sans-serif; font-size: 12pt; font-weight: normal; text-align: center; white-space: nowrap;";
@@ -503,15 +526,15 @@ function procesarUnTurno(bloqueTexto) {
   }
 
   // tabla 1: resumen
-  htmlWord += '<table border="0" align="center" cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: none !important; mso-border-alt: none !important; font-family: Calibri, sans-serif; font-size: 12pt; width: 19.0cm; max-width: 19.0cm; margin-left: auto; margin-right: auto; margin-bottom: 16pt; table-layout: fixed; color: #000000;">';
+  htmlWord += '<table border="0" align="center" cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: none !important; mso-border-alt: none !important; font-family: Calibri, sans-serif; font-size: 12pt; width: 19.2cm; max-width: 19.2cm; margin-left: auto; margin-right: auto; margin-bottom: 16pt; table-layout: fixed; color: #000000;">';
   htmlWord += '<tr>';
-  htmlWord += '<td style="' + t1HeaderStyle + ' width: 1.5cm;">límite</td>';
-  htmlWord += '<td style="' + t1HeaderStyle + ' width: 2.8cm;">jornada total</td>';
-  htmlWord += '<td style="' + t1HeaderStyle + ' width: 3.0cm;">conducción real</td>';
-  htmlWord += '<td style="' + t1HeaderStyle + ' width: 2.9cm;">descanso total</td>';
-  htmlWord += '<td style="' + t1HeaderStyle + ' width: 5.4cm;">fatiga</td>';
-  htmlWord += '<td style="' + t1HeaderStyle + ' width: 1.7cm;">coche</td>';
-  htmlWord += '<td style="' + t1HeaderStyle + ' width: 1.7cm;">casa</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 1.4cm;">límite</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 2.9cm;">jornada total</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 3.4cm;">conducción real</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 3.2cm;">descanso total</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 4.7cm;">fatiga</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 1.8cm;">coche</td>';
+  htmlWord += '<td style="' + t1HeaderStyle + ' width: 1.8cm;">casa</td>';
   htmlWord += '</tr>';
 
   htmlWord += '<tr>';
@@ -526,15 +549,15 @@ function procesarUnTurno(bloqueTexto) {
   htmlWord += '</table><br style="line-height: 8pt;">';
 
   // tabla 2: servicios
-  htmlWord += '<table border="0" align="center" cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: none !important; mso-border-alt: none !important; font-family: Calibri, sans-serif; font-size: 12pt; width: 19.0cm; max-width: 19.0cm; margin-left: auto; margin-right: auto; table-layout: fixed;">';
+  htmlWord += '<table border="0" align="center" cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: none !important; mso-border-alt: none !important; font-family: Calibri, sans-serif; font-size: 12pt; width: 19.2cm; max-width: 19.2cm; margin-left: auto; margin-right: auto; table-layout: fixed;">';
   htmlWord += '<tr style="color: #000000;">';
   htmlWord += '<td style="' + t2BaseStyle + ' width: 2.9cm;">tren</td>';
   htmlWord += '<td style="' + t2BaseStyle + ' width: 1.6cm;">toma</td>';
-  htmlWord += '<td style="' + t2BaseStyle + ' width: 2.7cm;">inicio</td>';
-  htmlWord += '<td style="' + t2BaseStyle + ' width: 2.7cm;">fin</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 2.8cm;">inicio</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 2.8cm;">fin</td>';
   htmlWord += '<td style="' + t2BaseStyle + ' width: 1.6cm;">deje</td>';
-  htmlWord += '<td style="' + t2BaseStyle + ' width: 3.0cm;">conducción</td>';
-  htmlWord += '<td style="' + t2BaseStyle + ' width: 4.5cm;">descanso</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 2.9cm;">conducción</td>';
+  htmlWord += '<td style="' + t2BaseStyle + ' width: 4.6cm;">descanso</td>';
   htmlWord += '</tr>';
 
   for (var n = 0; n < services.length; n++) {
@@ -645,7 +668,7 @@ function ejecutarProcesamiento() {
   var docCompleto = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>";
   docCompleto += "<head><meta charset='utf-8'>";
   docCompleto += "<style>";
-  docCompleto += "@page { size: 23.5cm 16.0cm; mso-page-orientation: landscape; margin: 2.0cm 2.25cm 2.0cm 2.25cm; }";
+  docCompleto += "@page { size: 23.5cm 16.0cm; mso-page-orientation: landscape; margin: 2.0cm 2.15cm 2.0cm 2.15cm; }";
   docCompleto += "body { font-family: Calibri, sans-serif; font-size: 12pt; }";
   docCompleto += "</style></head><body>";
   docCompleto += contenidoTurnos;
